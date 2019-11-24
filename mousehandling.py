@@ -62,11 +62,12 @@ while True:
         motion = 0
 
         # Convert video to grayscale 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(ROI, cv2.COLOR_BGR2GRAY)
 
         # Apply gaussian blur to see motion easier
         gray = cv2.GaussianBlur(gray, (21, 21), 0) 
 
+        # Redraw ROI problem might be here
         # Set static frame
         if static_back is None: 
             static_back = gray 
@@ -93,7 +94,7 @@ while True:
   
             (x, y, w, h) = cv2.boundingRect(contour) 
             # Draw green rectangle around moving object
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 3) 
+            cv2.rectangle(ROI, (x, y), (x + w, y + h), (200, 200, 0), 3) 
         # Might need to change this ROI to frame
 
         # Displaying image in gray_scale 
@@ -106,6 +107,8 @@ while True:
         # Displaying the black and white image in which if 
         # intencity difference greater than 30 it will appear white 
         cv2.imshow("Threshold Frame", thresh_frame) 
+
+        cv2.imshow("Region of Interest", ROI)
 
     # Displaying color frame with contour of motion of object 
     cv2.imshow("Color Frame", frame) 
