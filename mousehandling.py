@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import queue
 
 # Tracks if the mouse is currently drawing a rectangle
 drawing = False 
@@ -14,6 +15,8 @@ point2 = ()
 # Initializes background 
 static_back = None
 
+centerPoints = []
+
 # Initiailizes lsit of items in motion
 #inMotion = [None, None]
 
@@ -24,6 +27,7 @@ def mouse_drawing(event, x, y, flags, params):  # Collect coordinate data from m
             drawing = True
             point1 = (x, y)
         else:
+            time.sleep(3)   # Gives 3 seconds for user to move before detection starts
             drawing = False
     elif event == cv2.EVENT_MOUSEMOVE:
         if drawing is True:
@@ -79,7 +83,7 @@ while True:
 
         # Show white if the difference above is greater than 30
         # WIll be displayed as the threshold frame
-        thresh_frame = cv2.threshold(diff_frame, 35, 255, cv2.THRESH_BINARY)[1] 
+        thresh_frame = cv2.threshold(diff_frame, 20, 255, cv2.THRESH_BINARY)[1] # Was 35 for second paramenter. 20 works well too
         thresh_frame = cv2.dilate(thresh_frame, None, iterations = 2)
     
         # Maybe implement adaptive thresholding
@@ -95,6 +99,21 @@ while True:
             (x, y, w, h) = cv2.boundingRect(contour) 
             # Draw green rectangle around moving object
             cv2.rectangle(ROI, (x, y), (x + w, y + h), (200, 200, 0), 3) 
+            # Draw center of moving object
+            centerXCoord = int(x + (1/2) * w)
+            centerYCoord = int(y + (1/2) * h)
+            centerPoint = (centerXCoord, centerYCoord)
+            cv2.circle(ROI, centerPoint, 5, (200, 200, 0), -1, 8, 0)
+
+            if len(centerPoints) > 30:
+                centerPoints.pop(0)
+            centerPoints.append(centerPoint)
+            
+            for point in centerPoints:
+                cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
+
+            
+
         # Might need to change this ROI to frame
 
         # Displaying image in gray_scale 
