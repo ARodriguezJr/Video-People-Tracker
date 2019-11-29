@@ -1,4 +1,5 @@
 import cv2
+import math
 import numpy as np
 import scipy as sp
 from scipy import stats
@@ -107,7 +108,7 @@ while True:
             centerPoint = (centerXCoord, centerYCoord)
             cv2.circle(ROI, centerPoint, 5, (200, 200, 0), -1, 8, 0)
 
-            if len(centerPoints) > 10:
+            if len(centerPoints) > 2:
                 centerPoints.pop(0)
             centerPoints.append(centerPoint)
             
@@ -116,9 +117,25 @@ while True:
                 cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
                     
             (angle, _, _, _, _) = stats.linregress(centerPoints)
-
-
             print(angle)
+
+            lineLength = 300
+            #print(centerPoint[0])
+            #print(centerPoint[1])
+            #print(math.cos(angle * np.pi / 180.0))
+
+            # Need to error check in case angle is undefined or NaN
+            if not math.isnan(angle):
+                # maybe check if angle is negative or positive
+                # Seems to be inverted based on camera view
+                if angle >= 0:
+                    lineEndX = int(centerPoint[0] + lineLength * math.cos(angle * np.pi / 180.0))
+                    lineEndY = int(centerPoint[1] - lineLength * math.sin(angle * np.pi / 180.0))
+                else:
+                    lineEndX = int(centerPoint[0] - lineLength * math.cos(angle * np.pi / 180.0))
+                    lineEndY = int(centerPoint[1] - lineLength * math.sin(angle * np.pi / 180.0))
+                # Draws directional line
+                cv2.line(ROI, centerPoint, (lineEndX, lineEndY), (0, 150, 215), 5)
 
         # Might need to change this ROI to frame
 
