@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import scipy as sp
+from scipy import stats
 import time
 import queue
 
@@ -105,14 +107,18 @@ while True:
             centerPoint = (centerXCoord, centerYCoord)
             cv2.circle(ROI, centerPoint, 5, (200, 200, 0), -1, 8, 0)
 
-            if len(centerPoints) > 30:
+            if len(centerPoints) > 10:
                 centerPoints.pop(0)
             centerPoints.append(centerPoint)
             
+            # Display previous 10 points 
             for point in centerPoints:
                 cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
+                    
+            (angle, _, _, _, _) = stats.linregress(centerPoints)
 
-            
+
+            print(angle)
 
         # Might need to change this ROI to frame
 
