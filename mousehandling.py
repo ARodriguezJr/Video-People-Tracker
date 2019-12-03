@@ -16,9 +16,14 @@ point1 = ()
 point2 = () 
 
 # Initializes background 
-static_back = None
+static_back = 
 
-centerPoints = []
+# Variables to hold directional values of moving objects
+vertical = "Up"
+horizontal = "Right"
+
+# List to hold previous points of objects
+#centerPoints = []
 
 # Initiailizes lsit of items in motion
 #inMotion = [None, None]
@@ -36,6 +41,12 @@ def mouse_drawing(event, x, y, flags, params):  # Collect coordinate data from m
         if drawing is True:
             point2 = (x, y)
 
+class Person:
+    centerPoints = []
+    id = 0
+    def __init__(self, nextID):
+        self.id = nextID
+
 cap = cv2.VideoCapture(0)   # Initialize video capture
 
 #cv2.namedWindow("Frame")
@@ -43,7 +54,6 @@ cap = cv2.VideoCapture(0)   # Initialize video capture
 
 cv2.namedWindow("Color Frame")
 cv2.setMouseCallback("Color Frame", mouse_drawing)    # Add event callback to video feed window
-
 
 while True:
     _, frame = cap.read()   # Capture frames from camera
@@ -86,7 +96,7 @@ while True:
 
         # Show white if the difference above is greater than 30
         # WIll be displayed as the threshold frame
-        thresh_frame = cv2.threshold(diff_frame, 20, 255, cv2.THRESH_BINARY)[1] # Was 35 for second paramenter. 20 works well too
+        thresh_frame = cv2.threshold(diff_frame, 10, 255, cv2.THRESH_BINARY)[1] # Was 35 for second paramenter. 20 works well too
         thresh_frame = cv2.dilate(thresh_frame, None, iterations = 2)
     
         # Maybe implement adaptive thresholding
@@ -95,7 +105,7 @@ while True:
         (cnts, _) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) 
 
         for contour in cnts: 
-            if cv2.contourArea(contour) < 10000: 
+            if cv2.contourArea(contour) < 10000: # Was at 10000
                 continue
             motion = 1
   
@@ -108,34 +118,56 @@ while True:
             centerPoint = (centerXCoord, centerYCoord)
             cv2.circle(ROI, centerPoint, 5, (200, 200, 0), -1, 8, 0)
 
-            if len(centerPoints) > 2:
+            if len(centerPoints) > 10:
                 centerPoints.pop(0)
             centerPoints.append(centerPoint)
+
+            # Calcualtes change of coordinates between first and last coords in list
+            dX = centerPoint[0] - centerPoints[0][0]
+            dY = centerPoint[1] - centerPoints[0][1]
             
+            
+            if dX > 15 or dX < -15:
+                if dX >= 0:
+                    horizontal = "Right"
+                    #print("Right", end='')
+                else:
+                    horizontal = "Left"
+                    #print("Left", end='')
+            if dY > 15 or dY < -15:
+                if dY >= 0:
+                    vertical = "Down"
+                    #print("Down")
+                else:
+                    vertical = "Up"
+                    #print("Up")
+            if (dX > 15 or dX < -15) or (dY > 15 or dY < -15):
+                cv2.putText(ROI, vertical + "-" + horizontal, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+
             # Display previous 10 points 
             for point in centerPoints:
                 cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
                     
-            (angle, _, _, _, _) = stats.linregress(centerPoints)
-            print(angle)
+            #(angle, _, _, _, _) = stats.linregress(centerPoints)
+            #print(angle)
 
-            lineLength = 300
+            #lineLength = 300
             #print(centerPoint[0])
             #print(centerPoint[1])
             #print(math.cos(angle * np.pi / 180.0))
 
             # Need to error check in case angle is undefined or NaN
-            if not math.isnan(angle):
+            #if not math.isnan(angle):
                 # maybe check if angle is negative or positive
                 # Seems to be inverted based on camera view
-                if angle >= 0:
-                    lineEndX = int(centerPoint[0] + lineLength * math.cos(angle * np.pi / 180.0))
-                    lineEndY = int(centerPoint[1] - lineLength * math.sin(angle * np.pi / 180.0))
-                else:
-                    lineEndX = int(centerPoint[0] - lineLength * math.cos(angle * np.pi / 180.0))
-                    lineEndY = int(centerPoint[1] - lineLength * math.sin(angle * np.pi / 180.0))
+                #if angle >= 0:
+                    #lineEndX = int(centerPoint[0] + lineLength * math.cos(angle * np.pi / 180.0))
+                    #lineEndY = int(centerPoint[1] - lineLength * math.sin(angle * np.pi / 180.0))
+                #else:
+                    #lineEndX = int(centerPoint[0] - lineLength * math.cos(angle * np.pi / 180.0))
+                    #lineEndY = int(centerPoint[1] - lineLength * math.sin(angle * np.pi / 180.0))
                 # Draws directional line
-                cv2.line(ROI, centerPoint, (lineEndX, lineEndY), (0, 150, 215), 5)
+                #cv2.line(ROI, centerPoint, (lineEndX, lineEndY), (0, 150, 215), 5)
 
         # Might need to change this ROI to frame
 
