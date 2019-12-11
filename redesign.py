@@ -227,9 +227,10 @@ while True:
         for index, movingPerson in enumerate(movingPersons):
             # Checks if the person was in frame - if not, pop it from list
             if movingPerson.inFrame == False:
+                print("Killed person at index")
                 print(index)
                 movingPersons.pop(index)
-            # Resets inFrame to false
+            #Resets inFrame to false
             movingPerson.inFrame = False           
 
         # Displaying image in gray_scale 
