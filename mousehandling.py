@@ -16,17 +16,30 @@ point1 = ()
 point2 = () 
 
 # Initializes background 
-static_back = 
+static_back = None
 
 # Variables to hold directional values of moving objects
 vertical = "Up"
 horizontal = "Right"
 
+# Counters of how many people that left or entered a room
+entered = 0
+left = 0
+
 # List to hold previous points of objects
 #centerPoints = []
 
+# Next int for unique object in frame
+nextID = 0
+
+# List of objects in motion
+movingPersons = []
+
 # Initiailizes lsit of items in motion
 #inMotion = [None, None]
+
+# Boolean value for if the tempPerson object was cleared and needs to be made again
+needNewTemp = True
 
 def mouse_drawing(event, x, y, flags, params):  # Collect coordinate data from mouse event to draw rectangle
     global point1, point2, drawing
@@ -46,6 +59,16 @@ class Person:
     id = 0
     def __init__(self, nextID):
         self.id = nextID
+    #def __init__(self, nextID, centroid):
+        #self.id = nextID
+        #self.centerPoints.append(centroid)
+    
+    def pushCentroid(self, centroid):
+        self.centerPoints.append(centroid)
+    
+    def clear(self):
+        self.centerPoints = []
+        self.id = 0
 
 cap = cv2.VideoCapture(0)   # Initialize video capture
 
@@ -106,10 +129,24 @@ while True:
 
         for contour in cnts: 
             if cv2.contourArea(contour) < 10000: # Was at 10000
-                continue
+                continue        # Skips over contour if not at threshold
             motion = 1
-  
-            (x, y, w, h) = cv2.boundingRect(contour) 
+
+            # If centroid doesnt match a previous centroid in list of movingPersons, iterate nextID and make new person
+            #check if moving person array was made or of the next idex in list was made
+            #print("Before length: ", "")
+            #print(len(movingPerson))
+            #if len(movingPerson) <= nextID:
+             #   movingPerson.append(Person(nextID))
+              #  print('1st')
+            #elif len(movingPerson[nextID].centerPoints) == 0:
+             #   movingPerson.append(Person(nextID))
+              #  print("2nd")
+            ##print("After: ", "")
+            #print(len(movingPerson))
+
+            # Finds contour bounding rectangle and centroid of object
+            (x, y, w, h) = cv2.boundingRect(contour)        # Coordinates of found contour
             # Draw green rectangle around moving object
             cv2.rectangle(ROI, (x, y), (x + w, y + h), (200, 200, 0), 3) 
             # Draw center of moving object
@@ -118,13 +155,55 @@ while True:
             centerPoint = (centerXCoord, centerYCoord)
             cv2.circle(ROI, centerPoint, 5, (200, 200, 0), -1, 8, 0)
 
-            if len(centerPoints) > 10:
-                centerPoints.pop(0)
-            centerPoints.append(centerPoint)
+            # tempPerson known as movingPersons[nextID] or [NextID - 1]
+            # mkae new temp person if already values in centroid list
+            if needNewTemp == True:
+                tempPerson = Person(nextID)
+                needNewTemp = False
+
+            tempPerson.pushCentroid(centerPoint)
+
+            # If first Person found, append person to MovingPerson list
+            if len(movingPersons) == 0:
+                movingPersons.append(tempPerson)
+                nextID = nextID + 1
+                tempPerson.clear()
+                needNewTemp = True
+                print('1st')
+
+            # Try to assign IDs after two center points have been found
+            # May need to be > 2 or another number
+            # may have to do a for loop for each moving person in movingPersons
+            if len(tempPerson.centerPoints) == 2:
+                centroidMatch = False
+                print("Checking")
+                for newCentroid in tempPerson.centerPoints:
+                    for movingPerson in movingPersons:
+                        for currentCentroid in movingPerson.centerPoints:
+                            if newCentroid == currentCentroid:
+                                # Centroid Match found, no new ID will be made
+                                centroidMatch = True
+                                # maybe clear out centroid list or MATCH TO current ID'd person
+                
+                # Create new person if no match was found
+                if centroidMatch == False:
+                    print("CREATING NEW ID!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    movingPersons.append(tempPerson)
+                    tempPerson.clear()
+                    nextID = nextID + 1
+
+
+            
+
+            # If centroid doesnt match a previous centroid in list of movingPersons, iterate nextID and make new person
+
+            if len(tempPerson.centerPoints) > 10:
+                tempPerson.centerPoints.pop(0)
+            tempPerson.centerPoints.append(centerPoint)
 
             # Calcualtes change of coordinates between first and last coords in list
-            dX = centerPoint[0] - centerPoints[0][0]
-            dY = centerPoint[1] - centerPoints[0][1]
+            dX = centerPoint[0] - tempPerson.centerPoints[0][0]
+            dY = centerPoint[1] - tempPerson.centerPoints[0][1]
             
             
             if dX > 15 or dX < -15:
@@ -145,9 +224,18 @@ while True:
                 cv2.putText(ROI, vertical + "-" + horizontal, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
 
             # Display previous 10 points 
-            for point in centerPoints:
+            for point in tempPerson.centerPoints:
                 cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
-                    
+            #print(movingPerson[nextID].id)
+            cv2.putText(ROI, "tempPerson.id", (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+
+            # Incrememnt to next ID if object is different
+            #if len(movingPersons[nextID].centerPoints) == 1:
+            #    nextID = nextID + 1
+
+            # Bounces between 1 and 2
+            print("End: ", "")
+            print(len(movingPersons))                 
             #(angle, _, _, _, _) = stats.linregress(centerPoints)
             #print(angle)
 
