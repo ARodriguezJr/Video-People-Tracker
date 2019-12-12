@@ -1,119 +1,274 @@
 import cv2
+import math
 import numpy as np
+import scipy as sp
+from scipy import stats
 import time
-import pandas
-from datetime import datetime
+import queue
+
+# Tracks if the mouse is currently drawing a rectangle
+drawing = False 
+
+# Top reft point of rectangle
+point1 = () 
+
+# Bottom right point of rectangle
+point2 = () 
 
 # Initializes background 
 static_back = None
 
-# Initiailizes lsit of items in motion
-inMotion = [None, None]
+# Counters of how many people that left or entered a room
+entered = 0
+exited = 0
 
-# Time of movement
-time = []
+# Next int for unique object in frame
+nextID = 0
 
-# Initializing time frame/ dataframe
-df = pandas.DataFrame(columns = ["Start", "End"]) 
+# List of objects in motion
+movingPersons = []
 
-capture = cv2.VideoCapture(0)
+# Threshold for determining nearby points
+NEARTHRESH = 20
 
-while(True):
-    # Capture frame-by-frame
-    ret, frame = capture.read()
+# Boolean variable for if a nearby centroid was found
+matchFound = False
 
-    #Set motion to 0
-    motion = 0
 
-    # Convert video to grayscale 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+def mouse_drawing(event, x, y, flags, params):  # Collect coordinate data from mouse event to draw rectangle
+    global point1, point2, drawing
+    if event == cv2.EVENT_LBUTTONDOWN:
+        if drawing is False:
+            drawing = True
+            point1 = (x, y)
+        else:
+            time.sleep(3)   # Gives 3 seconds for user to move before detection starts
+            drawing = False
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if drawing is True:
+            point2 = (x, y)
 
-    # Apply gaussian blur to see motion easier
-    gray = cv2.GaussianBlur(gray, (21, 21), 0) 
+def isNear(newCentroid, oldCentroid):
+    MaxX = oldCentroid[0] + NEARTHRESH
+    MinX = oldCentroid[0] - NEARTHRESH
 
-    # Set static frame
-    if static_back is None: 
-        static_back = gray 
-        continue
+    MaxY = oldCentroid[1] + NEARTHRESH
+    MinY = oldCentroid[1] - NEARTHRESH
 
-    # Difference betwee static frame above and Gaussian blur frame
-    # Will be displayed as the difference frame 
-    diff_frame = cv2.absdiff(static_back, gray) 
+    if newCentroid[0] > MinX and newCentroid[0] < MaxX:
+        if newCentroid[1] > MinY and newCentroid[1] < MaxY:
+            # If centerpoint is within threshold for being near
+            return True
+    else:
+        return False
 
-    # Show white if the difference above is greater than 30
-    # WIll be displayed as the threshold frame
-    thresh_frame = cv2.threshold(diff_frame, 35, 255, cv2.THRESH_BINARY)[1] 
-    thresh_frame = cv2.dilate(thresh_frame, None, iterations = 2)
+class Person:
+    centerPoints = []
+    id = 0
+    center = None
+    direction = None
+    inFrame = None
+    horizontal = None
+    vertical = None
 
-    # Possible adaptive thresholding
-    #thresh_frame = cv2.adaptiveThreshold(diff_frame, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 1) # may need [1]
-    #thresh_frame = cv2.dilate(thresh_frame, None, iterations = 2)
+    def __init__(self, nextID, centroid):
+        self.id = nextID
+        self.center = centroid
+        self.centerPoints.append(centroid)
+        self.inFrame = True
+    
+    def pushCentroid(self, centroid):
+        self.center = centroid
+        self.centerPoints.append(centroid)
+    
+    def clear(self):
+        self.centerPoints = []
+        self.id = 0
+        self.center = None
 
-     # Finding contour of moving object 
-    (cnts, _) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) 
-  
-    for contour in cnts: 
-        if cv2.contourArea(contour) < 10000: 
+    def checkCenterpointLength(self):
+        if len(self.centerPoints) > 10:
+            self.centerPoints.pop(0)
+
+    def getDirection(self): 
+        print(self.center)
+        dX = self.center[0] - self.centerPoints[0][0]
+        dY = self.center[1] - self.centerPoints[0][1]
+        
+        if dX > 15 or dX < -15:
+            if dX >= 0:
+                self.horizontal = "Right"
+                #print("Right", end='')
+            else:
+                self.horizontal = "Left"
+                #print("Left", end='')
+        else:
+            self.horizontal = "Calculating"
+        if dY > 15 or dY < -15:
+            if dY >= 0:
+                self.vertical = "Down"
+                #print("Down")
+            else:
+                self.vertical = "Up"
+                #print("Up")
+        else:
+            self.vertical = "Calculating"
+        
+        if (dX > 15 or dX < -15) or (dY > 15 or dY < -15):
+            cv2.putText(ROI, self.vertical + "-" + self.horizontal, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+
+        # Display previous 10 points 
+        for point in self.centerPoints:
+            cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
+        #print(movingPerson[nextID].id)
+        #cv2.putText(ROI, str(self.id), (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+        print(str(self.horizontal))
+
+
+
+
+cap = cv2.VideoCapture(0)   # Initialize video capture: 0 for front camera, 1 for rear camera
+
+#cv2.namedWindow("Frame")
+#cv2.setMouseCallback("Frame", mouse_drawing)    # Add event callback to video feed window
+
+cv2.namedWindow("Color Frame")
+cv2.setMouseCallback("Color Frame", mouse_drawing)    # Add event callback to video feed window
+
+while True:
+    _, frame = cap.read()   # Capture frames from camera
+
+    # Draw ROI then wait seconds
+    if point1 and point2:
+        ROIRect = cv2.rectangle(frame, point1, point2, (255, 0, 0), 5)
+        ROI = frame[point1[1] : point2[1], point1[0] : point2[0]]  # Creates region of interest
+
+
+    if point1 and point2 and not drawing:
+        #cv2.rectangle(frame, point1, point2, (255, 0, 0))
+
+        # Draw Region of Interest 
+        ROIRect = cv2.rectangle(frame, point1, point2, (255, 0, 0), 5)
+        ROI = frame[point1[1] : point2[1], point1[0] : point2[0]]  # Creates region of interest
+
+        ########################################################
+                           #MOTION PROCESSING#
+        ########################################################
+
+        #Set motion to 0
+        motion = 0
+
+        # Convert video to grayscale 
+        gray = cv2.cvtColor(ROI, cv2.COLOR_BGR2GRAY)
+
+        # Apply gaussian blur to see motion easier
+        gray = cv2.GaussianBlur(gray, (21, 21), 0) 
+
+        # Redraw ROI problem might be here
+        # Set static frame
+        if static_back is None: 
+            static_back = gray 
             continue
-        motion = 1
-  
-        (x, y, w, h) = cv2.boundingRect(contour) 
-        # Draw green rectangle around moving object
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 3) 
-  
-    # Appending status of motion 
-    inMotion.append(motion) 
-  
-    inMotion = inMotion[-2:] 
-  
-    # Appending Start time of motion 
-    if inMotion[-1] == 1 and inMotion[-2] == 0: 
-        time.append(datetime.now()) 
-  
-    # Appending End time of motion 
-    if inMotion[-1] == 0 and inMotion[-2] == 1: 
-        time.append(datetime.now()) 
-  
-    # Displaying image in gray_scale 
-    cv2.imshow("Gray Frame", gray) 
-  
-    # Displaying the difference in currentframe to 
-    # the staticframe(very first_frame) 
-    cv2.imshow("Difference Frame", diff_frame) 
-  
-    # Displaying the black and white image in which if 
-    # intencity difference greater than 30 it will appear white 
-    cv2.imshow("Threshold Frame", thresh_frame) 
-  
+
+        # Difference betwee static frame above and Gaussian blur frame
+        # Will be displayed as the difference frame 
+        diff_frame = cv2.absdiff(static_back, gray) 
+
+        # Show white if the difference above is greater than 30
+        # WIll be displayed as the threshold frame
+        thresh_frame = cv2.threshold(diff_frame, 10, 255, cv2.THRESH_BINARY)[1] # Was 35 for second paramenter. 20 works well too
+        thresh_frame = cv2.dilate(thresh_frame, None, iterations = 2)
+
+        # Get countouring data of image
+        (cnts, _) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) 
+
+        for contour in cnts: 
+            if cv2.contourArea(contour) < 10000: # Was at 10000
+                continue        # Skips over contour if not at threshold
+            motion = 1
+
+            # Finds contour bounding rectangle and centroid of object
+            (x, y, w, h) = cv2.boundingRect(contour)        
+            # Draw green rectangle around moving object
+            cv2.rectangle(ROI, (x, y), (x + w, y + h), (200, 200, 0), 3) 
+            # Draw center of moving object
+            centerXCoord = int(x + (1/2) * w)
+            centerYCoord = int(y + (1/2) * h)
+            newCentroid = (centerXCoord, centerYCoord)
+            cv2.circle(ROI, newCentroid, 5, (200, 200, 0), -1, 8, 0)
+
+            # If first Person found, create first person in movingPerson
+            if len(movingPersons) == 0:
+                movingPersons.append(Person(nextID, newCentroid))
+                nextID = nextID + 1
+                print('1st')
+            else:
+                # Check if centroid is nearby a current centerpoint
+                for movingPerson in movingPersons:
+                    if isNear(newCentroid, movingPerson.center):
+                        movingPerson.pushCentroid(newCentroid)
+                        matchFound = True
+                        movingPerson.inFrame = True
+                        print("Centroid added")
+                        break
+                if matchFound == False:
+                    movingPersons.append(Person(nextID, newCentroid))
+                    nextID = nextID + 1
+                    movingPerson.inFrame = True
+                    #time.sleep(.100)
+                    print("New Person Made")
+                    break
+                matchFound = False
+
+            # Check length of each Person's centerpoint list and calculate direction
+            for movingPerson in movingPersons:
+                movingPerson.checkCenterpointLength()
+                movingPerson.getDirection()
+
+            # Bounces between 1 and 2
+            print("End: ", "")
+            print(len(movingPersons))  
+
+        for index, movingPerson in enumerate(movingPersons):
+            # Checks if the person was in frame - if not, pop it from list
+            if movingPerson.inFrame == False:
+                # Calculate if they were going or exiting
+                if movingPerson.horizontal == "Left":   # Leaving
+                    exited = exited + 1
+                elif movingPerson.horizontal == "Right": # Going
+                    entered = entered + 1
+                print("Killed person at index")
+                print(index)
+                movingPersons.pop(index)
+            #Resets inFrame to false
+            movingPerson.inFrame = False     
+
+        enteredString = "Entered: " + str(entered)
+        exitedString = "Exited: " + str(exited)
+
+        cv2.putText(frame, enteredString, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)      
+        cv2.putText(frame, exitedString, (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)      
+
+
+        # Displaying image in gray_scale 
+        cv2.imshow("Gray Frame", gray) 
+
+        # Displaying the difference in currentframe to 
+        # the staticframe(very first_frame) 
+        cv2.imshow("Difference Frame", diff_frame) 
+
+        # Displaying the black and white image in which if 
+        # intencity difference greater than 30 it will appear white 
+        cv2.imshow("Threshold Frame", thresh_frame) 
+
+        cv2.imshow("Region of Interest", ROI)
+         
+
     # Displaying color frame with contour of motion of object 
     cv2.imshow("Color Frame", frame) 
 
-    key = cv2.waitKey(1) 
-    # if q entered whole process will stop 
-    if key == ord('q'): 
-        # if something is movingthen it append the end time of movement 
-        if motion == 1: 
-            time.append(datetime.now()) 
+    if cv2.waitKey(1) == 13:
         break
-  
-# Appending time of motion in DataFrame 
-for i in range(0, len(time), 2): 
-    df = df.append({"Start":time[i], "End":time[i + 1]}, ignore_index = True) 
-  
-# Creating a csv file in which time of movements will be saved 
-df.to_csv("Time_of_movements.csv") 
-  
-video.release() 
-  
-# Destroying all the windows 
-cv2.destroyAllWindows() 
 
-#img = cv2.imread('logo.png')
-
-#px = img[190,10]
-#print(px)
-
-
-# accessing only blue pixel
-#blue = img[0,0,0]
-#print(blue)
+cap.release()
+cv2.destroyAllWindows()

@@ -20,7 +20,7 @@ static_back = None
 
 # Counters of how many people that left or entered a room
 entered = 0
-left = 0
+exited = 0
 
 # Next int for unique object in frame
 nextID = 0
@@ -68,6 +68,9 @@ class Person:
     center = None
     direction = None
     inFrame = None
+    horizontal = None
+    vertical = None
+
     def __init__(self, nextID, centroid):
         self.id = nextID
         self.center = centroid
@@ -88,36 +91,38 @@ class Person:
             self.centerPoints.pop(0)
 
     def getDirection(self): 
+        print(self.center)
         dX = self.center[0] - self.centerPoints[0][0]
         dY = self.center[1] - self.centerPoints[0][1]
         
         if dX > 15 or dX < -15:
             if dX >= 0:
-                horizontal = "Right"
+                self.horizontal = "Right"
                 #print("Right", end='')
             else:
-                horizontal = "Left"
+                self.horizontal = "Left"
                 #print("Left", end='')
         else:
-            horizontal = "Calculating"
+            self.horizontal = "Calculating"
         if dY > 15 or dY < -15:
             if dY >= 0:
-                vertical = "Down"
+                self.vertical = "Down"
                 #print("Down")
             else:
-                vertical = "Up"
+                self.vertical = "Up"
                 #print("Up")
         else:
-            vertical = "Calculating"
+            self.vertical = "Calculating"
         
         if (dX > 15 or dX < -15) or (dY > 15 or dY < -15):
-            cv2.putText(ROI, vertical + "-" + horizontal, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+            cv2.putText(ROI, self.vertical + "-" + self.horizontal, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
 
         # Display previous 10 points 
         for point in self.centerPoints:
             cv2.circle(ROI, point, 5, (200, 200, 0), -1, 8, 0)
         #print(movingPerson[nextID].id)
-        cv2.putText(ROI, str(self.id), (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+        #cv2.putText(ROI, str(self.id), (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)
+        print(str(self.horizontal))
 
 
 
@@ -227,11 +232,23 @@ while True:
         for index, movingPerson in enumerate(movingPersons):
             # Checks if the person was in frame - if not, pop it from list
             if movingPerson.inFrame == False:
+                # Calculate if they were going or exiting
+                if movingPerson.horizontal == "Left":   # Leaving
+                    exited = exited + 1
+                elif movingPerson.horizontal == "Right": # Going
+                    entered = entered + 1
                 print("Killed person at index")
                 print(index)
                 movingPersons.pop(index)
             #Resets inFrame to false
-            movingPerson.inFrame = False           
+            movingPerson.inFrame = False     
+
+        enteredString = "Entered: " + str(entered)
+        exitedString = "Exited: " + str(exited)
+
+        cv2.putText(frame, enteredString, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)      
+        cv2.putText(frame, exitedString, (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 4)      
+
 
         # Displaying image in gray_scale 
         cv2.imshow("Gray Frame", gray) 
